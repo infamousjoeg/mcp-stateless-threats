@@ -2,7 +2,7 @@
 import json, urllib.request
 
 def call(port, method, params=None, token=None, client=None):
-    """One stateless request. No session, no handshake — each call stands alone."""
+    """One stateless request. No session, no handshake - each call stands alone."""
     params = dict(params or {})
     meta = {}
     if client:
