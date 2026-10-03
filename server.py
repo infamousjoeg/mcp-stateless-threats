@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-A tiny, deliberately-vulnerable MCP server shaped like the 2026-07-28 spec:
+A tiny, deliberately-vulnerable MCP-shaped simulator:
   - stateless transport: no initialize handshake, no Mcp-Session-Id
-  - every request self-describes identity in _meta
-  - cross-call state lives in server-minted handles (the Tasks extension)
+  - protocol metadata is self-reported; authenticated identity is separate
+  - cross-call state is stored server-side and referenced by task handles
 
 It is INTENTIONALLY insecure in a few specific ways so the PoCs can show what
 bites. Each weakness is flagged with a `# VULN:` comment and the fix.
@@ -12,9 +12,13 @@ Run one (or several) instances pointed at a shared store:
     python3 server.py --port 9001 --store /tmp/mcp_tasks.db
     python3 server.py --port 9002 --store /tmp/mcp_tasks.db   # same store = "any instance serves any request"
 
+This is not a conformant MCP implementation. See docs/spec-scope.md.
 stdlib only. Python 3.11+.
 """
 import argparse, json, os, sqlite3, threading, time, secrets, http.server, socketserver
+from pathlib import Path
+
+from common import port_number
 
 STORE = None
 WEAK_HANDLES = False
@@ -47,15 +51,11 @@ def init_store():
     """)
     c.commit(); c.close()
 
-_seq = 0
-_seq_lock = threading.Lock()
 def mint_handle():
-    global _seq
     if WEAK_HANDLES:
         # VULN: guessable handle. Fix: secrets.token_urlsafe(32) (>=128 bits).
-        with _seq_lock:
-            _seq += 1
-            return f"task_{int(time.time())}_{_seq:04d}"
+        # INSERT's SQLite rowid becomes the counter inside the creation transaction.
+        return None
     return "task_" + secrets.token_urlsafe(24)
 
 # --- task worker -----------------------------------------------------------
@@ -106,15 +106,19 @@ def handle_rpc(req, headers):
 
     if method == "server/discover":
         return {"protocolVersions": ["2026-07-28"], "capabilities": {"extensions": ["io.modelcontextprotocol/tasks"]},
-                "serverInfo": {"name": "vuln-demo", "instance": INSTANCE}}
+                "serverInfo": {"name": "vuln-demo", "instance": INSTANCE},
+                "demo": {"store": STORE, "weak_handles": WEAK_HANDLES}}
 
     if method == "tools/call":
         tool = params.get("name")
         args = params.get("arguments", {})
         tid = mint_handle()
         c = db()
-        c.execute("INSERT INTO tasks(task_id,owner,tenant,status,tool,args,created) VALUES(?,?,?,?,?,?,?)",
-                  (tid, who, tenant, "working", tool, json.dumps(args), time.time()))
+        inserted = c.execute("INSERT INTO tasks(task_id,owner,tenant,status,tool,args,created) VALUES(?,?,?,?,?,?,?)",
+                             (tid, who, tenant, "working", tool, json.dumps(args), time.time()))
+        if WEAK_HANDLES:
+            tid = f"task_{inserted.lastrowid:04d}"
+            c.execute("UPDATE tasks SET task_id=? WHERE rowid=?", (tid, inserted.lastrowid))
         c.commit(); c.close()
         threading.Thread(target=run_task, args=(tid,), daemon=True).start()
         return {"resultType": "task", "task": {"taskId": tid, "status": "working"}}
@@ -161,16 +165,37 @@ class Threaded(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=9001)
-    ap.add_argument("--store", default="/tmp/mcp_tasks.db")
+    ap.add_argument("--port", type=port_number, default=os.getenv("MCP_DEMO_PORT", "9001"))
+    ap.add_argument("--store", default=os.getenv("MCP_DEMO_STORE", "/tmp/mcp_tasks.db"))
     ap.add_argument("--weak-handles", action="store_true")
-    ap.add_argument("--fresh", action="store_true", help="wipe the store first")
+    ap.add_argument("--fresh", action="store_true", help="require a new store; refuse to overwrite existing data")
+    ap.add_argument("--ready-file", type=Path, help=argparse.SUPPRESS)
     a = ap.parse_args()
-    STORE = a.store; WEAK_HANDLES = a.weak_handles; INSTANCE = f"srv:{a.port}"
-    if a.fresh and os.path.exists(STORE):
-        for suf in ("", "-wal", "-shm"):
-            try: os.remove(STORE + suf)
-            except OSError: pass
-    init_store()
-    print(f"[{INSTANCE}] stateless MCP (vuln demo) on :{a.port} store={STORE} weak_handles={WEAK_HANDLES}")
-    Threaded(("127.0.0.1", a.port), H).serve_forever()
+    STORE = str(Path(a.store).resolve()); WEAK_HANDLES = a.weak_handles
+    # Bind before opening SQLite. A stale process must never cause a database reset.
+    try:
+        httpd = Threaded(("127.0.0.1", a.port), H)
+    except OSError as error:
+        ap.exit(1, f"Cannot bind loopback port {a.port}: {error}. Stop that server or choose another port.\n")
+    try:
+        if a.fresh:
+            try:
+                # Atomic exclusive creation also protects against another --fresh starter.
+                fd = os.open(STORE, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                os.close(fd)
+            except FileExistsError:
+                ap.exit(1, "Refusing --fresh on an existing store. Choose a new --store path or use demo.py.\n")
+        INSTANCE = f"srv:{httpd.server_port}"
+        init_store()
+        if a.ready_file:
+            a.ready_file.write_text(json.dumps({
+                "port": httpd.server_port, "store": STORE, "weak_handles": WEAK_HANDLES,
+            }))
+        print(f"[{INSTANCE}] vulnerable local simulator; store={STORE} weak_handles={WEAK_HANDLES}", flush=True)
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    except (OSError, sqlite3.Error) as error:
+        ap.exit(1, f"Cannot start demo server: {error}\n")
+    finally:
+        httpd.server_close()
