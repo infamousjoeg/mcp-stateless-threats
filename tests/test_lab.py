@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -64,6 +65,13 @@ def run_script(name, *args, timeout=20):
 
 
 class LabTests(unittest.TestCase):
+    def test_loopback_startup_does_not_require_hostname_resolution(self):
+        import server as lab_server
+        with mock.patch("socket.getfqdn", side_effect=AssertionError("DNS unavailable")):
+            with lab_server.Threaded(("127.0.0.1", 0), lab_server.H) as listener:
+                self.assertEqual(listener.server_name, "127.0.0.1")
+                self.assertGreater(listener.server_port, 0)
+
     def test_managed_server_releases_port_on_exception(self):
         from demo import server_instance
         with tempfile.TemporaryDirectory() as directory:

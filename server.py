@@ -163,6 +163,12 @@ class H(http.server.BaseHTTPRequestHandler):
 class Threaded(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
+    def server_bind(self):
+        # HTTPServer normally performs reverse DNS here. This loopback-only lab
+        # needs no hostname lookup and must start even when DNS is unavailable.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=port_number, default=os.getenv("MCP_DEMO_PORT", "9001"))
