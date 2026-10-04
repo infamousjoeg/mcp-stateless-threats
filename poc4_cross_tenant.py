@@ -1,37 +1,40 @@
 #!/usr/bin/env python3
+"""PoC 4: authenticated Bob reads Alice's task through a second server instance.
+
+Two loopback instances share one SQLite store. Requests go directly to each
+port; this does not demonstrate a load balancer or durable worker failover.
+Run automatically: python3 demo.py 4
 """
-PoC 4 - Cross-Tenant Bleed on the Round-Robin
+from common import check_server, client_for, demo_args, expect, line, run_demo, task_from
 
-"Any server instance can handle any request." Great for scaling - and it
-removed the implicit isolation a lot of deployments leaned on. The spec even
-deleted tasks/list because task->caller binding "cannot be defined" in this
-model, punting multi-tenant isolation entirely to you. If your task store is
-keyed only by handle, a tenant that lands on a *different* instance drives
-another tenant's task by handle alone.
 
-Setup - TWO instances, ONE shared store (that's the whole point):
-    python3 server.py --port 9001 --store /tmp/mcp_tasks.db --fresh
-    python3 server.py --port 9002 --store /tmp/mcp_tasks.db
-Run:
-    python3 poc4_cross_tenant.py
-"""
-from common import call, line
+def main():
+    args = demo_args(__doc__)
+    expect(args.port != args.peer_port, "PoC 4 requires two distinct server ports")
+    check_server(args)
+    check_server(args, port=args.peer_port)
+    alice = client_for(args)
+    bob = client_for(args, args.peer_port)
+    # Show both token-derived identities before attempting the boundary crossing.
+    own = task_from(bob("tools/call", {
+        "name": "make_invoice", "arguments": {"note": "Bob's own task"},
+    }, token="tok-bob"))["taskId"]
+    identity = task_from(bob("tasks/get", {"taskId": own}, token="tok-bob"))
+    expect(identity.get("owner") == "bob" and identity.get("tenant") == "globex",
+           "The second instance did not authenticate Bob/globex")
+    handle = task_from(alice("tools/call", {
+        "name": "run_billing", "arguments": {"amount": 9000, "note": "acme simulated billing"},
+    }, token="tok-alice"))["taskId"]
+    print(f"Alice/acme creates {handle} on port {args.port}.")
+    print(f"Authenticated Bob/globex uses port {args.peer_port} and an assumed leaked handle.")
+    peek = task_from(bob("tasks/get", {"taskId": handle}, token="tok-bob"))
+    expect(peek.get("owner") == "alice" and peek.get("tenant") == "acme",
+           "Bob did not read Alice's task across instances")
+    print(f"  Bob's read: owner={peek['owner']} tenant={peek['tenant']} status={peek['status']}")
+    line()
+    print("Observed: authenticated access crossed the tenant boundary through the shared store.")
+    print("FIX: scope authorization to trusted issuer, subject, tenant, object, and operation.")
 
-ACME = 9001     # tenant 'acme' talks to instance A
-GLOBEX = 9002   # tenant 'globex' talks to instance B - different box, same store
 
-print("acme (on srv:9001) starts a task:")
-r = call(ACME, "tools/call", {"name": "run_billing", "arguments": {"amount": 9000, "note": "acme confidential"}},
-         token="tok-alice")
-h = r["task"]["taskId"]
-print(f"   handle {h} lives in the shared store")
-line()
-
-print("globex (on srv:9002 - a DIFFERENT instance) was handed/guessed that handle.")
-peek = call(GLOBEX, "tasks/get", {"taskId": h})
-print(f"   globex reads it off srv:9002 -> owner={peek['task']['owner']} tenant={peek['task']['tenant']} status={peek['task']['status']}")
-line()
-print("Two companies, two instances, zero session affinity - and one tenant read")
-print("the other's task just by hitting a different node with the handle.")
-print("\nFIX: namespace state by (issuer, subject, tenant); the protocol won't")
-print("     keep tenants apart for you now that any instance serves any request.")
+if __name__ == "__main__":
+    run_demo(main)

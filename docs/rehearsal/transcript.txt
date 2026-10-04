@@ -1,0 +1,229 @@
+Publication note: the evidence export destination is normalized; all runtime output is retained.
+
+Job 3 audience-lab rehearsal
+Source commit: bbe33a59e443fd966acc058f4d215e0634f3232f
+Captured: 2026-10-03T22:33:59.071409+00:00
+Environment: macOS-26.6.2-arm64-arm-64bit-Mach-O; 3.14.6 (main, Jun 10 2026, 10:03:53) [Clang 21.0.0 (clang-2100.0.123.102)]
+Checkout: new local clone of the committed candidate; initially clean.
+Payments, credentials, and agent behavior are simulated.
+
+$ /opt/homebrew/opt/python@3.14/bin/python3.14 --version
+Python 3.14.6
+[exit 0; 0.006s]
+
+$ /opt/homebrew/opt/python@3.14/bin/python3.14 -m unittest discover -s tests -v
+test_evidence_export_cannot_overwrite_its_store (test_lab.LabTests.test_evidence_export_cannot_overwrite_its_store) ... ok
+test_existing_store_survives_fresh_on_another_port (test_lab.LabTests.test_existing_store_survives_fresh_on_another_port) ... ok
+test_failed_bind_does_not_reset_database (test_lab.LabTests.test_failed_bind_does_not_reset_database) ... ok
+test_foreign_or_old_charge_cannot_satisfy_evidence (test_lab.LabTests.test_foreign_or_old_charge_cannot_satisfy_evidence) ... ok
+test_interrupt_cleans_up_owned_processes_and_stores (test_lab.LabTests.test_interrupt_cleans_up_owned_processes_and_stores) ... ok
+test_ledger_read_does_not_create_missing_database (test_lab.LabTests.test_ledger_read_does_not_create_missing_database) ... ok
+test_managed_server_releases_port_on_exception (test_lab.LabTests.test_managed_server_releases_port_on_exception) ... ok
+test_poc4_rejects_different_peer_store (test_lab.LabTests.test_poc4_rejects_different_peer_store) ... ok
+test_poc5_custom_configuration_produces_correlated_evidence (test_lab.LabTests.test_poc5_custom_configuration_produces_correlated_evidence) ... ok
+test_poc5_timeout_fails_without_claiming_success (test_lab.LabTests.test_poc5_timeout_fails_without_claiming_success) ... ok
+test_poc_uses_environment_configuration (test_lab.LabTests.test_poc_uses_environment_configuration) ... ok
+test_runner_all_demos (test_lab.LabTests.test_runner_all_demos) ... ok
+test_runner_occupied_port_leaves_existing_listener (test_lab.LabTests.test_runner_occupied_port_leaves_existing_listener) ... ok
+test_termination_cleans_up_owned_processes_and_stores (test_lab.LabTests.test_termination_cleans_up_owned_processes_and_stores) ... ok
+test_weak_enumeration_works_across_clock_boundary (test_lab.LabTests.test_weak_enumeration_works_across_clock_boundary) ... ok
+test_wrong_handle_mode_is_actionable (test_lab.LabTests.test_wrong_handle_mode_is_actionable) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 12.028s
+
+OK
+[exit 0; 12.082s]
+
+$ /opt/homebrew/opt/python@3.14/bin/python3.14 demo.py all
+
+PoC 1: poc1_handle_heist.py
+Alice starts a task on one local server using a synthetic credential.
+  task handle: task_qcBNoerd2uKuLo8QMRMZ5tEvOHiKa6D4
+----------------------------------------------------------------
+Assume that handle leaked. The demo passes it directly to the attacker.
+The attacker uses the same instance, with no authentication token.
+  anonymous tasks/get: owner=alice tenant=acme
+  cancellation acknowledged: True; reported status: cancelled
+----------------------------------------------------------------
+Observed: unauthorized metadata access and cancellation request.
+This does not prove that execution stopped. PoC 5 checks the consequence.
+FIX: authenticate the caller, then authorize the task, tenant, and operation.
+     Client metadata is not identity. Redact bearer handles from production logs.
+PASS PoC 1
+
+PoC 2: poc2_enumerable_handles.py
+Alice creates two tasks. Bob creates his own task and receives a seed handle.
+  Bob's own seed: task_0003
+----------------------------------------------------------------
+  task_0001: owner=alice tenant=acme
+  task_0002: owner=alice tenant=acme
+----------------------------------------------------------------
+Observed: Bob enumerated 2 other callers' tasks; his own task is excluded.
+FIX: generate unpredictable IDs AND authorize every task operation.
+PASS PoC 2
+
+PoC 3: poc3_confused_deputy.py
+A crafted document contains Alice's known handle.
+Simulation: a regex chooses an operation; no LLM or external service is called.
+  Bob's agent submits: {'method': 'tasks/cancel', 'taskId': 'task_0odI6_borb3WU2dh6C4fQGxRaKqrJx7Q'}
+----------------------------------------------------------------
+Observed: Bob requested cancellation of Alice's task and changed its reported status.
+Execution has not been verified as stopped.
+FIX: enforce caller/tenant/operation policy on the resolved task.
+     Ownership checks do not prevent every unwanted action by an authorized agent.
+PASS PoC 3
+
+PoC 4: poc4_cross_tenant.py
+Alice/acme creates task_5emMRbZFBfdTwdeFWNSA9IjBBtwM0VbI on port 50358.
+Authenticated Bob/globex uses port 50360 and an assumed leaked handle.
+  Bob's read: owner=alice tenant=acme status=working
+----------------------------------------------------------------
+Observed: authenticated access crossed the tenant boundary through the shared store.
+FIX: scope authorization to trusted issuer, subject, tenant, object, and operation.
+PASS PoC 4
+
+PoC 5: poc5_phantom_killswitch.py
+Alice starts a task that records a simulated $500 charge in SQLite.
+  cancellation request acknowledged; server reports task status: cancelled
+Polling the local ledger for this task's post-ack side effect...
+----------------------------------------------------------------
+Observed: acknowledgement received, cancelled status reported, charge still recorded.
+Application evidence record (synthetic local data, not an MCP response):
+{
+  "cancel_ack": "received",
+  "reported_task_status": "cancelled",
+  "side_effect": "charge_posted",
+  "outcome": "not_stopped",
+  "outcome_verified_by": "demo_local_ledger_check",
+  "task_id": "task_uiHBGH9IdUW0VkA4H3lbikpkePwkQeHl",
+  "amount": 500.0,
+  "cancel_ack_at": 1791066852.027842,
+  "charge_row_id": 1,
+  "charge_posted_at": 1791066856.0893528
+}
+FIX: authorize cancellation, enforce it in the worker, and verify the consequence.
+PASS PoC 5
+
+All selected demos produced their expected observations.
+[exit 0; 4.917s]
+
+$ /opt/homebrew/opt/python@3.14/bin/python3.14 demo.py 1
+
+PoC 1: poc1_handle_heist.py
+Alice starts a task on one local server using a synthetic credential.
+  task handle: task_NKRho0yHPiTqwL17NlWP6V2WqggLXumJ
+----------------------------------------------------------------
+Assume that handle leaked. The demo passes it directly to the attacker.
+The attacker uses the same instance, with no authentication token.
+  anonymous tasks/get: owner=alice tenant=acme
+  cancellation acknowledged: True; reported status: cancelled
+----------------------------------------------------------------
+Observed: unauthorized metadata access and cancellation request.
+This does not prove that execution stopped. PoC 5 checks the consequence.
+FIX: authenticate the caller, then authorize the task, tenant, and operation.
+     Client metadata is not identity. Redact bearer handles from production logs.
+PASS PoC 1
+
+All selected demos produced their expected observations.
+[exit 0; 0.223s]
+
+$ /opt/homebrew/opt/python@3.14/bin/python3.14 demo.py 5 --evidence-json poc5-evidence.json
+
+PoC 5: poc5_phantom_killswitch.py
+Alice starts a task that records a simulated $500 charge in SQLite.
+  cancellation request acknowledged; server reports task status: cancelled
+Polling the local ledger for this task's post-ack side effect...
+----------------------------------------------------------------
+Observed: acknowledgement received, cancelled status reported, charge still recorded.
+Application evidence record (synthetic local data, not an MCP response):
+{
+  "cancel_ack": "received",
+  "reported_task_status": "cancelled",
+  "side_effect": "charge_posted",
+  "outcome": "not_stopped",
+  "outcome_verified_by": "demo_local_ledger_check",
+  "task_id": "task_zdmV1O6ZzBMwkhGj-5_-jenoVCam-05T",
+  "amount": 500.0,
+  "cancel_ack_at": 1791066856.5307221,
+  "charge_row_id": 1,
+  "charge_posted_at": 1791066860.587734
+}
+FIX: authorize cancellation, enforce it in the worker, and verify the consequence.
+PASS PoC 5
+
+All selected demos produced their expected observations.
+[exit 0; 4.33s]
+
+$ /opt/homebrew/opt/python@3.14/bin/python3.14 demo.py all
+
+PoC 1: poc1_handle_heist.py
+Alice starts a task on one local server using a synthetic credential.
+  task handle: task_pvl7veF_NX702w4a-7mn5ZWBRvnHOwGY
+----------------------------------------------------------------
+Assume that handle leaked. The demo passes it directly to the attacker.
+The attacker uses the same instance, with no authentication token.
+  anonymous tasks/get: owner=alice tenant=acme
+  cancellation acknowledged: True; reported status: cancelled
+----------------------------------------------------------------
+Observed: unauthorized metadata access and cancellation request.
+This does not prove that execution stopped. PoC 5 checks the consequence.
+FIX: authenticate the caller, then authorize the task, tenant, and operation.
+     Client metadata is not identity. Redact bearer handles from production logs.
+PASS PoC 1
+
+PoC 2: poc2_enumerable_handles.py
+Alice creates two tasks. Bob creates his own task and receives a seed handle.
+  Bob's own seed: task_0003
+----------------------------------------------------------------
+  task_0001: owner=alice tenant=acme
+  task_0002: owner=alice tenant=acme
+----------------------------------------------------------------
+Observed: Bob enumerated 2 other callers' tasks; his own task is excluded.
+FIX: generate unpredictable IDs AND authorize every task operation.
+PASS PoC 2
+
+PoC 3: poc3_confused_deputy.py
+A crafted document contains Alice's known handle.
+Simulation: a regex chooses an operation; no LLM or external service is called.
+  Bob's agent submits: {'method': 'tasks/cancel', 'taskId': 'task_x9-W_vlY3Lkp05QfMzGWBE3psMhjumJb'}
+----------------------------------------------------------------
+Observed: Bob requested cancellation of Alice's task and changed its reported status.
+Execution has not been verified as stopped.
+FIX: enforce caller/tenant/operation policy on the resolved task.
+     Ownership checks do not prevent every unwanted action by an authorized agent.
+PASS PoC 3
+
+PoC 4: poc4_cross_tenant.py
+Alice/acme creates task_uix2ON3_ClG2Y6MWSoEL0ghfOcn2uLtw on port 50414.
+Authenticated Bob/globex uses port 50416 and an assumed leaked handle.
+  Bob's read: owner=alice tenant=acme status=working
+----------------------------------------------------------------
+Observed: authenticated access crossed the tenant boundary through the shared store.
+FIX: scope authorization to trusted issuer, subject, tenant, object, and operation.
+PASS PoC 4
+
+PoC 5: poc5_phantom_killswitch.py
+Alice starts a task that records a simulated $500 charge in SQLite.
+  cancellation request acknowledged; server reports task status: cancelled
+Polling the local ledger for this task's post-ack side effect...
+----------------------------------------------------------------
+Observed: acknowledgement received, cancelled status reported, charge still recorded.
+Application evidence record (synthetic local data, not an MCP response):
+{
+  "cancel_ack": "received",
+  "reported_task_status": "cancelled",
+  "side_effect": "charge_posted",
+  "outcome": "not_stopped",
+  "outcome_verified_by": "demo_local_ledger_check",
+  "task_id": "task_epaZrxWB8OHDYFXa75exuuvhOf4sXGvB",
+  "amount": 500.0,
+  "cancel_ack_at": 1791066861.51023,
+  "charge_row_id": 1,
+  "charge_posted_at": 1791066865.580904
+}
+FIX: authorize cancellation, enforce it in the worker, and verify the consequence.
+PASS PoC 5
+
+All selected demos produced their expected observations.
+[exit 0; 5.011s]

@@ -1,46 +1,67 @@
 #!/usr/bin/env python3
-"""
-PoC 5 - The Phantom Kill Switch   (headliner)
+"""PoC 5: cancellation acknowledgement, reported status, and observed effect differ.
 
-tasks/cancel is cooperative and ack-only. The client asks to cancel, gets an
-acknowledgement, the UI flips to "cancelled" - and the work keeps running and
-completes its side effect anyway. Compliance hears "stop = stopped." The spec
-says "stop = please."
-
-Setup:
-    python3 server.py --port 9001 --store /tmp/mcp_tasks.db --fresh
-Run:
-    python3 poc5_phantom_killswitch.py
+The protocol permits cooperative cancellation. This simulator additionally
+misreports cancellation while its worker ignores it. The payment is a local
+SQLite record, not a real charge or external reconciliation service.
+Run automatically: python3 demo.py 5
 """
+import json
+from pathlib import Path
 import time
-from common import call, line, charges
+from common import (check_server, client_for, demo_args, expect, line, run_demo,
+                    task_from, wait_for_charge)
 
-PORT = 9001
 
-print("Start a task that ends in a real side effect (a $500 charge).")
-r = call(PORT, "tools/call", {"name": "place_order", "arguments": {"amount": 500, "note": "the thing we want to stop"}},
-         token="tok-alice")
-h = r["task"]["taskId"]
-print(f"   handle: {h}")
-line()
+def main():
+    args = demo_args(__doc__, evidence=True)
+    if args.evidence_json:
+        expect(not args.evidence_json.exists() and not args.evidence_json.is_symlink(),
+               "Refusing to overwrite an existing evidence destination. Choose a new --evidence-json path.")
+        protected = {Path(str(Path(args.store).resolve()) + suffix)
+                     for suffix in ("", "-wal", "-shm", "-journal")}
+        expect(args.evidence_json.resolve() not in protected,
+               "The evidence destination cannot be the database or a SQLite companion file.")
+    check_server(args)
+    call = client_for(args)
+    print("Alice starts a task that records a simulated $500 charge in SQLite.")
+    handle = task_from(call("tools/call", {
+        "name": "place_order", "arguments": {"amount": 500, "note": "simulated order to stop"},
+    }, token="tok-alice"))["taskId"]
+    ack = call("tasks/cancel", {"taskId": handle}, token="tok-alice")
+    acknowledged_at = time.time()
+    expect(ack.get("ack") is True, "Cancellation was not acknowledged")
+    reported = task_from(call("tasks/get", {"taskId": handle}, token="tok-alice"))
+    expect(reported.get("status") == "cancelled", "Expected the simulator's false cancelled status")
+    print("  cancellation request acknowledged; server reports task status: cancelled")
+    print("Polling the local ledger for this task's post-ack side effect...")
+    charge = wait_for_charge(args.store, handle, args.timeout, acknowledged_at)
+    expect(charge["tenant"] == "acme" and charge["amount"] == 500,
+           "The observed charge does not match Alice's simulated order")
+    final = task_from(call("tasks/get", {"taskId": handle}, token="tok-alice"))
+    expect(final.get("status") == "cancelled", "The final reported status changed unexpectedly")
+    evidence = {
+        "cancel_ack": "received",
+        "reported_task_status": final["status"],
+        "side_effect": "charge_posted",
+        "outcome": "not_stopped",
+        "outcome_verified_by": "demo_local_ledger_check",
+        "task_id": handle,
+        "amount": charge["amount"],
+        "cancel_ack_at": acknowledged_at,
+        "charge_row_id": charge["id"],
+        "charge_posted_at": charge["ts"],
+    }
+    if args.evidence_json:
+        # Exclusive creation also refuses a file or alias created since preflight.
+        with args.evidence_json.open("x") as output:
+            output.write(json.dumps(evidence, indent=2) + "\n")
+    line()
+    print("Observed: acknowledgement received, cancelled status reported, charge still recorded.")
+    print("Application evidence record (synthetic local data, not an MCP response):")
+    print(json.dumps(evidence, indent=2))
+    print("FIX: authorize cancellation, enforce it in the worker, and verify the consequence.")
 
-time.sleep(1)
-print("Change of heart - hit the kill switch:")
-ack = call(PORT, "tasks/cancel", {"taskId": h})
-print(f"   tasks/cancel -> {ack}")
-st = call(PORT, "tasks/get", {"taskId": h})
-print(f"   UI now shows status = {st['task']['status']}   ('cancelled' - phew, right?)")
-line()
 
-print("Wait for the work that 'stopped' to finish...")
-time.sleep(4)
-final = call(PORT, "tasks/get", {"taskId": h})
-ch = [c for c in charges() if c["task_id"] == h]
-print(f"   task status: {final['task']['status']}")
-print(f"   charges recorded for this task: {ch}")
-line()
-if ch:
-    print(f"The badge says 'cancelled' and the ${ch[0]['amount']:.0f} charge went through anyway.")
-print("A kill switch that only ack's is not a kill switch.")
-print("\nFIX: make cancel authorized, honored by the worker, and transactional")
-print("     with side effects - and make 'stopped' auditable, not aspirational.")
+if __name__ == "__main__":
+    run_demo(main)
