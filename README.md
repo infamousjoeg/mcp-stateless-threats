@@ -180,10 +180,13 @@ and timeout; absence of evidence does not establish a stopped task.
 
 ## Validation and follow-ups
 
-Python 3.11+ is the runtime target. CI targets Ubuntu/macOS with Python 3.11
-and 3.14. Passing results and a transcript for the integrated revision remain
-to be recorded in the [draft release checklist](docs/release-checklist.md);
-this documentation is not a claim that those runs passed.
+Python 3.11+ is the runtime target. The [captured candidate rehearsal](docs/rehearsal/README.md)
+records 16 passing regression tests, two successful all-five runs, and the
+headline examples on macOS 26.6.2 / Python 3.14.6. It includes the full PoC 5 JSON.
+CI targets Ubuntu/macOS with Python 3.11 and 3.14; check the
+[workflow results](https://github.com/infamousjoeg/mcp-stateless-threats/actions/workflows/ci.yml)
+for the commit being released. The [release checklist](docs/release-checklist.md)
+tracks final integration, deck alignment, and publication.
 
 The five vulnerabilities are intentional. A secure comparison
 ([#8](https://github.com/infamousjoeg/mcp-stateless-threats/issues/8)) and full

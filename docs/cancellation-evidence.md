@@ -5,6 +5,10 @@ cancellation request, it reports `cancelled`, and a same-task simulated $500
 charge appears afterward in SQLite. The worker intentionally ignores the
 cancellation request.
 
+The [captured candidate record](rehearsal/poc5-evidence.json) and
+[rehearsal provenance](rehearsal/README.md) provide an actual run in addition
+to the illustrative field reference below.
+
 The [pinned stable Tasks cancellation contract](https://github.com/modelcontextprotocol/ext-tasks/blob/5246bc3d0253c1c4b09e682f690b7e8b97362500/specification/2026-07-28/tasks.md#L383)
 is cooperative: acknowledgement does not guarantee work will stop or that the
 task will transition to `cancelled`. Its `resultType: "complete"` acknowledges

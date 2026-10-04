@@ -1,0 +1,98 @@
+{
+  "source_commit": "bbe33a59e443fd966acc058f4d215e0634f3232f",
+  "branch": "codex/job3-audience-lab",
+  "captured_at": "2026-10-03T22:33:59.071409+00:00",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "macos": "26.6.2",
+  "python": "3.14.6 (main, Jun 10 2026, 10:03:53) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "interpreter": "/opt/homebrew/opt/python@3.14/bin/python3.14",
+  "commands": [
+    {
+      "name": "version",
+      "argv": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "--version"
+      ],
+      "exit_status": 0,
+      "seconds": 0.006
+    },
+    {
+      "name": "tests",
+      "argv": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-v"
+      ],
+      "exit_status": 0,
+      "seconds": 12.082
+    },
+    {
+      "name": "all-demos",
+      "argv": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "demo.py",
+        "all"
+      ],
+      "exit_status": 0,
+      "seconds": 4.917
+    },
+    {
+      "name": "poc1",
+      "argv": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "demo.py",
+        "1"
+      ],
+      "exit_status": 0,
+      "seconds": 0.223
+    },
+    {
+      "name": "poc5",
+      "argv": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "demo.py",
+        "5",
+        "--evidence-json",
+        "poc5-evidence.json"
+      ],
+      "exit_status": 0,
+      "seconds": 4.33
+    },
+    {
+      "name": "repeat-all",
+      "argv": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "demo.py",
+        "all"
+      ],
+      "exit_status": 0,
+      "seconds": 5.011
+    }
+  ],
+  "source_sha256": {
+    ".github/workflows/ci.yml": "f23cddeaaa1f14f24ecc7729f58cd06fff3bebdb97ab467c00eedc72287e4dbb",
+    ".gitignore": "6d882f88b6f2fa664fabee74c67b4be573911f948315e39757f0675f66eca39d",
+    "LICENSE": "8a836d022fe9c51b8c08f5d2afd52f7792901b51f1ce107d64a42258a61dabe0",
+    "README.md": "e117cb46e43127056852a14b1eac509e4a634e9364649752482866ff614ca867",
+    "common.py": "598d34eb723411fa1cebfebcbb2f92ae1f520a7c8a70755d8aa88086398b5245",
+    "demo.py": "1a44a7fc6126f804fdad1aa1beec3f798feaf062fe3d5979de36a4b984cd0bca",
+    "docs/cancellation-evidence.md": "065e0487c7c8d02f75302680b3f523d879f9086f6e638094580c7aef4777673e",
+    "docs/release-checklist.md": "7f43b4097b4fdc844d3c7fd118c3499aa8add19bdea55fed4c854c30567ef4ce",
+    "docs/spec-scope.md": "a293830b8e900f1297e4faaa1e99280c544d4480d7d4827db31cf64ba1be4791",
+    "poc1_handle_heist.py": "47b1d1969dabf1e87ab77a7be44ba5507c7593c98f90df9949db5a45ca5a8e31",
+    "poc2_enumerable_handles.py": "2f6353634eddf1f82731427c7c1ec8192da0d5558736f83a40b59cddf658196d",
+    "poc3_confused_deputy.py": "34207f414711c4cb4d13d61c0577725737e47311f7b10777d6c855877e67b6e7",
+    "poc4_cross_tenant.py": "0fefa7fd516897b042752defd07e729b2b43553836352657fa377c2eff551064",
+    "poc5_phantom_killswitch.py": "baa8073d6ea3026e743c93520815e92959edf53aa3e746ebfa62bd046641d085",
+    "server.py": "a0f3c4d6c4f80f7f38808e6d9a6cadd4f03de4b11d03cf0f803380dd99ecb070",
+    "tests/test_lab.py": "2141bbe36f8f94c6e15b117f49a80434e7770c82a8f25f337c37fec4d70dcca9"
+  },
+  "runtime_root_empty_after_each_command": true,
+  "checkout_clean_after_commands": true,
+  "evidence_sha256": "4ae70307f398f544e9a5bf357ccd06bb4d0e0cb6f56ead76d2a6bd9e78fa24c5",
+  "publication_note": "Only the evidence export destination is normalized to poc5-evidence.json in the published commands; the original capture used an absolute output path outside the temporary checkout."
+}

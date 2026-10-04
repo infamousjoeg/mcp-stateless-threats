@@ -1,0 +1,12 @@
+{
+  "cancel_ack": "received",
+  "reported_task_status": "cancelled",
+  "side_effect": "charge_posted",
+  "outcome": "not_stopped",
+  "outcome_verified_by": "demo_local_ledger_check",
+  "task_id": "task_zdmV1O6ZzBMwkhGj-5_-jenoVCam-05T",
+  "amount": 500.0,
+  "cancel_ack_at": 1791066856.5307221,
+  "charge_row_id": 1,
+  "charge_posted_at": 1791066860.587734
+}
